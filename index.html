@@ -180,6 +180,7 @@ function eucDist(ax,ay,bx,by){return Math.sqrt((ax-bx)**2+(ay-by)**2)}
 // Particles
 function spawnParticle(x,y,color,count=5,speed=2,life=30){
   for(let i=0;i<count;i++){
+    if(particles.length>100)break; // cap particles for performance
     const a=Math.random()*Math.PI*2;
     const s=Math.random()*speed+0.5;
     particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life,maxLife:life,color,size:Math.random()*3+1});
@@ -484,11 +485,11 @@ function checkCollisions(){
         g.dir={x:-g.dir.x,y:-g.dir.y};
       }
     });
-    triggerFlash();triggerShake(8);
-    juiceState.screenZoom=1.05;
-    spawnParticle(pacman.x,pacman.y,'#f0f',15,3,40);
-    // Juice: wall pulse wave
-    juiceState.pulseWaves.push({x:pacman.x,y:pacman.y,radius:0,maxRadius:300,life:60});
+    triggerShake(8);
+    juiceState.screenZoom=1.03;
+    spawnParticle(pacman.x,pacman.y,'#f0f',8,2,25);
+    // Juice: wall pulse wave (smaller, faster)
+    juiceState.pulseWaves.push({x:pacman.x,y:pacman.y,radius:0,maxRadius:150,life:30});
     // Juice: score pop
     juiceState.scorePop=25;juiceState.scorePopText='+50';
   }
@@ -513,9 +514,9 @@ function checkCollisions(){
     flashAlpha=0.5;
     // Juice: level complete animation
     juiceState.levelFlashTimer=90;juiceState.levelTextScale=0.01;juiceState.levelParticles=true;
-    spawnParticle(W/2,H/2+HUD_H,'#0ff',60,5,80);
-    spawnParticle(W/2,H/2+HUD_H,'#f0f',60,5,80);
-    spawnParticle(W/2,H/2+HUD_H,'#ff0',60,5,80);
+    spawnParticle(W/2,H/2+HUD_H,'#0ff',20,4,40);
+    spawnParticle(W/2,H/2+HUD_H,'#f0f',20,4,40);
+    spawnParticle(W/2,H/2+HUD_H,'#ff0',20,4,40);
     setTimeout(()=>resetLevel(),2500);
     gameState='levelcomplete';
     return;
@@ -767,7 +768,7 @@ function drawMaze(){
       const glowColor=pa>0.1?'#cc44ff':(glowHues[level]||`hsl(${wallHue},100%,60%)`);
       ctx.save();
       ctx.strokeStyle=wallColor;
-      ctx.shadowColor=glowColor;ctx.shadowBlur=10+pa*10;
+      ctx.shadowColor=glowColor;ctx.shadowBlur=8+pa*4;
       ctx.lineWidth=2;
       
       // Check each neighbor
@@ -815,12 +816,12 @@ function drawDots(){
         // Outer glow ring
         ctx.strokeStyle=`hsl(${hue},100%,70%)`;
         ctx.shadowColor=`hsl(${hue},100%,80%)`;
-        ctx.shadowBlur=25*pulse;
+        ctx.shadowBlur=15*pulse;
         ctx.lineWidth=2;
         ctx.beginPath();ctx.arc(px,py,8*pulse,0,Math.PI*2);ctx.stroke();
         // Inner fill
         ctx.fillStyle=`hsl(${hue},100%,70%)`;
-        ctx.shadowBlur=30*pulse;
+        ctx.shadowBlur=18*pulse;
         ctx.beginPath();ctx.arc(px,py,6*pulse,0,Math.PI*2);ctx.fill();
         // Center bright spot
         ctx.fillStyle='#ffffff';
@@ -871,7 +872,7 @@ function drawPacman(){
   ];
   
   ctx.save();
-  ctx.shadowColor='#ff0';ctx.shadowBlur=20+pa*30;
+  ctx.shadowColor='#ff0';ctx.shadowBlur=15+pa*5;
   for(const l of layers){
     ctx.fillStyle=l.color;
     ctx.beginPath();
@@ -975,15 +976,15 @@ function drawGhostEyes(px,py,dir,scale){
 }
 
 function drawParticles(){
+  ctx.save();
   for(const p of particles){
     const alpha=p.life/p.maxLife;
-    ctx.save();
     ctx.globalAlpha=alpha;
     ctx.fillStyle=p.color;
-    ctx.shadowColor=p.color;ctx.shadowBlur=8;
+    ctx.shadowColor=p.color;ctx.shadowBlur=4;
     ctx.beginPath();ctx.arc(p.x+shakeX,p.y+shakeY,p.size*alpha,0,Math.PI*2);ctx.fill();
-    ctx.restore();
   }
+  ctx.restore();
 }
 
 function drawFloatingTexts(){
@@ -1076,7 +1077,7 @@ function drawTitleScreen(){
   ctx.font='bold 44px Orbitron';ctx.textAlign='center';
   const bgHue=(globalFrame*2)%360;
   ctx.fillStyle=`hsl(${bgHue},100%,50%)`;
-  ctx.shadowColor=`hsl(${bgHue},100%,50%)`;ctx.shadowBlur=40;
+  ctx.shadowColor=`hsl(${bgHue},100%,50%)`;ctx.shadowBlur=20;
   ctx.globalAlpha=0.3;
   ctx.fillText(title,W/2+2,H/2-58+HUD_H/2);
   ctx.globalAlpha=1;
@@ -1200,14 +1201,13 @@ function drawReadyScreen(){
 // ======================== JUICE DRAWING ========================
 
 function drawBassPulse(){
-  // Effect #1: Background pulse
   const isPower=frightenedTimer>0;
-  const pulseRate=isPower?0.15:0.05;
+  const pulseRate=isPower?0.12:0.05;
   const pulseIntensity=Math.sin(globalFrame*pulseRate);
   if(pulseIntensity>0.7){
-    const alpha=isPower?(pulseIntensity-0.7)*0.15:(pulseIntensity-0.7)*0.08;
+    const alpha=isPower?(pulseIntensity-0.7)*0.06:(pulseIntensity-0.7)*0.05;
     ctx.save();
-    ctx.fillStyle=isPower?`rgba(100,0,80,${alpha})`:`rgba(30,30,80,${alpha})`;
+    ctx.fillStyle=isPower?`rgba(60,0,50,${alpha})`:`rgba(30,30,80,${alpha})`;
     ctx.fillRect(0,0,W,H+HUD_H);
     ctx.restore();
   }
@@ -1300,13 +1300,12 @@ function drawSpeedLines(){
 }
 
 function drawPulseWaves(){
-  // Effect #5: Expanding ring outline only (no per-tile wall loop)
   for(const pw of juiceState.pulseWaves){
-    const alpha=pw.life/60*0.6;
+    const alpha=pw.life/30*0.4;
     ctx.save();
     ctx.strokeStyle=`rgba(255,0,255,${alpha})`;
-    ctx.shadowColor='#f0f';ctx.shadowBlur=15;
-    ctx.lineWidth=3;
+    ctx.shadowColor='#f0f';ctx.shadowBlur=6;
+    ctx.lineWidth=2;
     ctx.beginPath();ctx.arc(pw.x+shakeX,pw.y+shakeY,pw.radius,0,Math.PI*2);ctx.stroke();
     ctx.restore();
   }
@@ -1363,7 +1362,7 @@ function drawComboTexts(){
     ctx.globalAlpha=alpha;
     const hue=(globalFrame*10+c.life*5)%360;
     ctx.fillStyle=`hsl(${hue},100%,60%)`;
-    ctx.shadowColor=`hsl(${hue},100%,60%)`;ctx.shadowBlur=30;
+    ctx.shadowColor=`hsl(${hue},100%,60%)`;ctx.shadowBlur=15;
     ctx.font=`bold ${fontSize}px Orbitron`;
     ctx.textAlign='center';
     ctx.fillText(c.text,c.x+shakeX,c.y+shakeY);
@@ -1436,13 +1435,11 @@ function drawGhostZoom(){
 }
 
 function drawPowerAtmosphere(){
-  // Effect #6: Power mode atmosphere
   const a=juiceState.powerAtmosphere;
   if(a<0.01)return;
-  // Purple/red tint overlay
   ctx.save();
-  ctx.globalAlpha=a*0.15;
-  ctx.fillStyle='#400030';
+  ctx.globalAlpha=a*0.06;
+  ctx.fillStyle='#200018';
   ctx.fillRect(0,0,W,H+HUD_H);
   ctx.restore();
 }
@@ -1488,7 +1485,7 @@ function drawLevelComplete(){
   ctx.font=`bold ${Math.floor(36*scale)}px Orbitron`;
   ctx.textAlign='center';
   ctx.fillStyle=`hsl(${hue},100%,60%)`;
-  ctx.shadowColor=`hsl(${hue},100%,80%)`;ctx.shadowBlur=40;
+  ctx.shadowColor=`hsl(${hue},100%,80%)`;ctx.shadowBlur=20;
   ctx.fillText('LEVEL COMPLETE!',W/2,H/2+HUD_H/2);
   ctx.restore();
 }
@@ -1514,7 +1511,7 @@ function drawFruit(){
   const pulse=0.8+Math.sin(globalFrame*0.1)*0.2;
   ctx.save();
   ctx.fillStyle=fr.color;
-  ctx.shadowColor=fr.color;ctx.shadowBlur=20*pulse;
+  ctx.shadowColor=fr.color;ctx.shadowBlur=12*pulse;
   ctx.beginPath();ctx.arc(fr.x+shakeX,fr.y+shakeY,10*pulse,0,Math.PI*2);ctx.fill();
   ctx.fillStyle='#fff';ctx.shadowBlur=0;
   ctx.font='bold 10px Orbitron';ctx.textAlign='center';ctx.textBaseline='middle';
@@ -1569,7 +1566,7 @@ function drawKillStreak(){
   ctx.globalAlpha=Math.min(1,frightenedTimer/60);
   const hue=(globalFrame*12)%360;
   ctx.fillStyle=`hsl(${hue},100%,60%)`;
-  ctx.shadowColor=`hsl(${hue},100%,70%)`;ctx.shadowBlur=40;
+  ctx.shadowColor=`hsl(${hue},100%,70%)`;ctx.shadowBlur=15;
   ctx.font=`bold ${Math.floor(34*pulse)}px Orbitron`;
   ctx.textAlign='center';
   ctx.fillText(text,W/2,H/2-40+HUD_H/2);
