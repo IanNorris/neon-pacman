@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NEON PACMAN</title>
+<title>NEON PACMAN - JUICED EDITION</title>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -12,6 +12,18 @@ body{background:#000011;display:flex;justify-content:center;align-items:center;m
 canvas{display:block}
 #muteBtn{position:absolute;top:12px;right:12px;background:none;border:1px solid #0ff4;color:#0ff;font-family:'Orbitron',monospace;font-size:11px;padding:4px 8px;cursor:pointer;border-radius:4px;z-index:10;text-shadow:0 0 5px #0ff}
 #muteBtn:hover{background:#0ff2}
+@keyframes containerGlow{
+  0%{box-shadow:0 0 30px #0ff,0 0 60px #0ff3,inset 0 0 30px #0001}
+  16%{box-shadow:0 0 30px #f0f,0 0 60px #f0f3,inset 0 0 30px #0001}
+  33%{box-shadow:0 0 30px #ff0,0 0 60px #ff03,inset 0 0 30px #0001}
+  50%{box-shadow:0 0 30px #0f0,0 0 60px #0f03,inset 0 0 30px #0001}
+  66%{box-shadow:0 0 30px #f80,0 0 60px #f803,inset 0 0 30px #0001}
+  83%{box-shadow:0 0 30px #08f,0 0 60px #08f3,inset 0 0 30px #0001}
+  100%{box-shadow:0 0 30px #0ff,0 0 60px #0ff3,inset 0 0 30px #0001}
+}
+#container{animation:containerGlow 4s infinite ease-in-out;border-color:#0ff}
+@keyframes borderColor{0%{border-color:#0ff}25%{border-color:#f0f}50%{border-color:#ff0}75%{border-color:#0f0}100%{border-color:#0ff}}
+#container{animation:containerGlow 4s infinite ease-in-out,borderColor 6s infinite linear}
 </style>
 </head>
 <body>
@@ -102,6 +114,34 @@ const MODE_SCHEDULE=[[7,20],[7,20],[5,20],[5,999999]]; // scatter/chase seconds
 let frightenedTimer=0,ghostEatCombo;
 let globalFrame=0;
 
+// Juice state
+let juiceState={
+  // Pacman trail ribbon (#2)
+  pacTrail:[],
+  // Ghost afterimages (#3)
+  ghostTrails:{},
+  // Speed lines (#4)
+  speedLines:[],
+  // Pulse waves (#5)
+  pulseWaves:[],
+  // Combo system (#7)
+  dotStreak:0,comboTimer:0,lastPacDir:null,comboTexts:[],
+  // Score pop (#8)
+  scorePop:0,scorePopText:'',scorePopX:0,scorePopY:0,lastScore:0,
+  // Stars (#13)
+  stars:[],
+  // Dot ripples (#12)
+  dotRipples:[],dotsEatenCount:0,
+  // Death effect (#10)
+  deathSlowMo:0,deathDesaturate:0,deathShockwave:null,
+  // Ghost eat celebration (#11)
+  ghostFreeze:0,ghostZoom:null,lightningBolts:[],
+  // Level complete (#9)
+  levelFlashTimer:0,levelFlashColors:['#0ff','#f0f','#ff0','#0f0','#f80','#08f'],levelTextScale:0,levelParticles:false,
+  // Power mode
+  powerAtmosphere:0
+};
+
 // Directions
 const DIR={NONE:{x:0,y:0},UP:{x:0,y:-1},DOWN:{x:0,y:1},LEFT:{x:-1,y:0},RIGHT:{x:1,y:0}};
 const DIRS=[DIR.UP,DIR.DOWN,DIR.LEFT,DIR.RIGHT];
@@ -153,6 +193,13 @@ function triggerFlash(){flashAlpha=0.3}
 function initGame(){
   score=0;lives=3;level=1;gameState='title';
   particles=[];floatingTexts=[];
+  juiceState.stars=[];
+  for(let i=0;i<60;i++){
+    juiceState.stars.push({x:Math.random()*W,y:Math.random()*H+HUD_H,alpha:Math.random(),phase:Math.random()*Math.PI*2,speed:0.1+Math.random()*0.3,size:Math.random()*1.5+0.5});
+  }
+  juiceState.lastScore=0;
+  juiceState.dotStreak=0;juiceState.comboTimer=0;juiceState.comboTexts=[];
+  juiceState.dotsEatenCount=0;
 }
 
 function resetLevel(){
@@ -163,6 +210,17 @@ function resetLevel(){
   modeIndex=0;modeTimer=MODE_SCHEDULE[0][0]*60;scatterChase='scatter';
   resetPositions();
   gameState='ready';readyTimer=120;
+  juiceState.pacTrail=[];
+  juiceState.ghostTrails={};
+  juiceState.speedLines=[];
+  juiceState.pulseWaves=[];
+  juiceState.dotRipples=[];
+  juiceState.dotStreak=0;juiceState.comboTimer=0;juiceState.comboTexts=[];
+  juiceState.deathSlowMo=0;juiceState.deathDesaturate=0;juiceState.deathShockwave=null;
+  juiceState.ghostFreeze=0;juiceState.ghostZoom=null;juiceState.lightningBolts=[];
+  juiceState.levelFlashTimer=0;juiceState.levelTextScale=0;juiceState.levelParticles=false;
+  juiceState.powerAtmosphere=0;
+  juiceState.scorePop=0;
 }
 
 function resetPositions(){
@@ -379,6 +437,20 @@ function checkCollisions(){
     maze[pg.y][pg.x]=0;score+=10;dotsLeft--;
     sfxDot();
     spawnParticle(pacman.x,pacman.y,'#ff0',3,1,15);
+    // Juice: combo system
+    juiceState.dotStreak++;juiceState.comboTimer=60;
+    juiceState.dotsEatenCount++;
+    const ds=juiceState.dotStreak;
+    if(ds===5){juiceState.comboTexts.push({x:pacman.x,y:pacman.y,text:'5x COMBO!',life:90,maxLife:90});triggerShake(4);}
+    else if(ds===10){juiceState.comboTexts.push({x:pacman.x,y:pacman.y,text:'10x STREAK!',life:90,maxLife:90});triggerShake(6);}
+    else if(ds===20){juiceState.comboTexts.push({x:pacman.x,y:pacman.y,text:'20x INSANE!',life:120,maxLife:120});triggerShake(8);}
+    else if(ds===50){juiceState.comboTexts.push({x:pacman.x,y:pacman.y,text:'50x GODLIKE!',life:150,maxLife:150});triggerShake(12);}
+    // Juice: score pop
+    juiceState.scorePop=20;juiceState.scorePopText='+10';
+    // Juice: dot ripple every 5th dot
+    if(juiceState.dotsEatenCount%5===0){
+      juiceState.dotRipples.push({x:pacman.x,y:pacman.y,radius:0,maxRadius:40,life:30,maxLife:30});
+    }
   }
   // Power pellet
   if(maze[pg.y][pg.x]===3){
@@ -393,13 +465,22 @@ function checkCollisions(){
     });
     triggerFlash();
     spawnParticle(pacman.x,pacman.y,'#f0f',15,3,40);
+    // Juice: wall pulse wave
+    juiceState.pulseWaves.push({x:pacman.x,y:pacman.y,radius:0,maxRadius:Math.max(W,H),life:120});
+    // Juice: score pop
+    juiceState.scorePop=25;juiceState.scorePopText='+50';
   }
   
   // Level complete
   if(dotsLeft<=0){
     level++;
     flashAlpha=0.5;
-    setTimeout(()=>resetLevel(),1500);
+    // Juice: level complete animation
+    juiceState.levelFlashTimer=90;juiceState.levelTextScale=0.01;juiceState.levelParticles=true;
+    spawnParticle(W/2,H/2+HUD_H,'#0ff',60,5,80);
+    spawnParticle(W/2,H/2+HUD_H,'#f0f',60,5,80);
+    spawnParticle(W/2,H/2+HUD_H,'#ff0',60,5,80);
+    setTimeout(()=>resetLevel(),2500);
     gameState='levelcomplete';
     return;
   }
@@ -419,6 +500,17 @@ function checkCollisions(){
         triggerShake(12);triggerFlash();
         spawnFloat(g.x,g.y,pts.toString(),'#0ff');
         spawnParticle(g.x,g.y,g.color,20,3,40);
+        // Juice: ghost eat celebration
+        juiceState.ghostFreeze=12;
+        juiceState.ghostZoom={x:g.x,y:g.y,timer:20};
+        juiceState.scorePop=30;juiceState.scorePopText='+'+pts;
+        // Lightning bolts from ghost to edges
+        for(let li=0;li<6;li++){
+          const angle=Math.random()*Math.PI*2;
+          juiceState.lightningBolts.push({x:g.x,y:g.y,angle,life:15,maxLife:15});
+        }
+        // Rainbow massive score float
+        juiceState.comboTexts.push({x:g.x,y:g.y-10,text:pts+'!!',life:90,maxLife:90,rainbow:true,massive:true});
       }else{
         // Pacman dies
         pacmanDie();
@@ -431,7 +523,13 @@ function pacmanDie(){
   pacman.deathTimer=90;pacman.deathFrame=0;
   sfxDeath();triggerShake(15);
   lives--;
-  spawnParticle(pacman.x,pacman.y,'#ff0',30,4,50);
+  spawnParticle(pacman.x,pacman.y,'#ff0',50,5,60);
+  spawnParticle(pacman.x,pacman.y,'#f80',30,4,50);
+  spawnParticle(pacman.x,pacman.y,'#f00',20,3,40);
+  // Juice: death effects
+  juiceState.deathSlowMo=30;
+  juiceState.deathDesaturate=1;
+  juiceState.deathShockwave={x:pacman.x,y:pacman.y,radius:0,maxRadius:200,life:40,maxLife:40};
 }
 
 // Update
@@ -451,6 +549,60 @@ function update(){
     return p.life>0;
   });
   floatingTexts=floatingTexts.filter(f=>{f.y-=1.2;f.life--;return f.life>0;});
+  
+  // Juice updates
+  // Stars
+  for(const s of juiceState.stars){
+    s.phase+=0.02;s.alpha=0.3+Math.sin(s.phase)*0.4;
+    s.y+=s.speed*(frightenedTimer>0?3:1);
+    if(s.y>H+HUD_H){s.y=HUD_H;s.x=Math.random()*W;}
+  }
+  // Combo timer
+  if(juiceState.comboTimer>0){juiceState.comboTimer--;}
+  else{juiceState.dotStreak=0;}
+  // Combo texts
+  juiceState.comboTexts=juiceState.comboTexts.filter(c=>{c.y-=1.5;c.life--;return c.life>0;});
+  // Score pop
+  if(juiceState.scorePop>0)juiceState.scorePop--;
+  // Dot ripples
+  juiceState.dotRipples=juiceState.dotRipples.filter(r=>{r.radius+=2;r.life--;return r.life>0;});
+  // Pulse waves
+  juiceState.pulseWaves=juiceState.pulseWaves.filter(pw=>{pw.radius+=5;pw.life--;return pw.life>0;});
+  // Death effects
+  if(juiceState.deathDesaturate>0)juiceState.deathDesaturate-=0.015;
+  if(juiceState.deathShockwave){
+    juiceState.deathShockwave.radius+=5;juiceState.deathShockwave.life--;
+    if(juiceState.deathShockwave.life<=0)juiceState.deathShockwave=null;
+  }
+  // Ghost freeze
+  if(juiceState.ghostFreeze>0)juiceState.ghostFreeze--;
+  // Ghost zoom
+  if(juiceState.ghostZoom){juiceState.ghostZoom.timer--;if(juiceState.ghostZoom.timer<=0)juiceState.ghostZoom=null;}
+  // Lightning bolts
+  juiceState.lightningBolts=juiceState.lightningBolts.filter(l=>{l.life--;return l.life>0;});
+  // Level flash
+  if(juiceState.levelFlashTimer>0){juiceState.levelFlashTimer--;juiceState.levelTextScale=Math.min(juiceState.levelTextScale+0.05,1);}
+  // Power atmosphere lerp
+  juiceState.powerAtmosphere+=(frightenedTimer>0?1:0-juiceState.powerAtmosphere)*0.05;
+  // Pacman trail
+  if(pacman&&pacman.deathTimer<=0&&pacman.dir!==DIR.NONE){
+    juiceState.pacTrail.unshift({x:pacman.x,y:pacman.y});
+    if(juiceState.pacTrail.length>18)juiceState.pacTrail.length=18;
+  }
+  // Ghost trails
+  if(ghosts)for(const g of ghosts){
+    if(!juiceState.ghostTrails[g.name])juiceState.ghostTrails[g.name]=[];
+    juiceState.ghostTrails[g.name].unshift({x:g.x,y:g.y,frightened:g.frightened,eaten:g.eaten,color:g.color});
+    if(juiceState.ghostTrails[g.name].length>8)juiceState.ghostTrails[g.name].length=8;
+  }
+  // Speed lines
+  if(pacman&&pacman.dir!==DIR.NONE&&pacman.deathTimer<=0){
+    for(let i=0;i<2;i++){
+      const ox=(Math.random()-0.5)*T*2;const oy=(Math.random()-0.5)*T*2;
+      juiceState.speedLines.push({x:pacman.x+ox,y:pacman.y+oy,dx:-pacman.dir.x,dy:-pacman.dir.y,life:10,maxLife:10,len:8+Math.random()*12});
+    }
+  }
+  juiceState.speedLines=juiceState.speedLines.filter(sl=>{sl.x+=sl.dx*3;sl.y+=sl.dy*3;sl.life--;return sl.life>0;});
   
   if(gameState==='ready'){
     readyTimer--;
@@ -512,7 +664,7 @@ function update(){
   if(pacman.mouthAngle<0.05)pacman.mouthDir=1;
   
   movePacman();
-  ghosts.forEach(moveGhost);
+  if(juiceState.ghostFreeze<=0)ghosts.forEach(moveGhost);
   checkCollisions();
 }
 
@@ -553,10 +705,13 @@ function drawMaze(){
       }
       
       // Draw edges facing non-wall tiles
-      const wallColor=`hsl(${200+Math.sin(globalFrame*0.02+x*0.1+y*0.1)*20},100%,60%)`;
+      const pa=juiceState.powerAtmosphere;
+      const wallHue=pa>0.1?280+Math.sin(globalFrame*0.02+x*0.1+y*0.1)*20:200+Math.sin(globalFrame*0.02+x*0.1+y*0.1)*20;
+      const wallColor=`hsl(${wallHue},100%,${60+pa*10}%)`;
       ctx.save();
       ctx.strokeStyle=wallColor;
-      ctx.shadowColor='#00aaff';ctx.shadowBlur=10;
+      const glowColor=pa>0.1?'#cc44ff':'#00aaff';
+      ctx.shadowColor=glowColor;ctx.shadowBlur=10+pa*10;
       ctx.lineWidth=2;
       
       // Check each neighbor
@@ -648,7 +803,8 @@ function drawPacman(){
   else if(faceDir===DIR.UP)angle=-Math.PI/2;
   
   const mouth=pacman.mouthAngle*0.8;
-  const r=T*0.45;
+  const pa=juiceState.powerAtmosphere;
+  const r=T*0.45*(1+pa*0.15);
   const px=pacman.x+shakeX,py=pacman.y+shakeY;
   
   // Chromatic aberration
@@ -659,7 +815,7 @@ function drawPacman(){
   ];
   
   ctx.save();
-  ctx.shadowColor='#ff0';ctx.shadowBlur=20;
+  ctx.shadowColor='#ff0';ctx.shadowBlur=20+pa*30;
   for(const l of layers){
     ctx.fillStyle=l.color;
     ctx.beginPath();
@@ -782,9 +938,11 @@ function drawFloatingTexts(){
 
 function drawHUD(){
   ctx.save();
-  // Score
-  ctx.fillStyle='#fff';ctx.shadowColor='#0ff';ctx.shadowBlur=8;
-  ctx.font='bold 16px Orbitron';ctx.textAlign='left';
+  // Score with pop effect
+  const sp=juiceState.scorePop;
+  const scoreScale=1+sp*0.02;
+  ctx.fillStyle='#fff';ctx.shadowColor='#0ff';ctx.shadowBlur=8+sp;
+  ctx.font=`bold ${Math.floor(16*scoreScale)}px Orbitron`;ctx.textAlign='left';
   ctx.fillText('SCORE: '+score,10,28);
   
   // High score
@@ -836,11 +994,30 @@ function drawFlash(){
 
 function drawTitleScreen(){
   drawBackground();
+  drawStarField();
   
-  // Rainbow title
+  // Pulsing neon border
+  ctx.save();
+  const borderHue=(globalFrame*2)%360;
+  ctx.strokeStyle=`hsl(${borderHue},100%,60%)`;
+  ctx.shadowColor=`hsl(${borderHue},100%,60%)`;ctx.shadowBlur=20;
+  ctx.lineWidth=2;
+  ctx.strokeRect(10,HUD_H+10,W-20,H-20);
+  ctx.restore();
+  
+  // Rainbow title with multiple glow layers
   const title='NEON PACMAN';
   ctx.save();
-  ctx.font='bold 42px Orbitron';ctx.textAlign='center';
+  // Background glow layer
+  ctx.font='bold 44px Orbitron';ctx.textAlign='center';
+  const bgHue=(globalFrame*2)%360;
+  ctx.fillStyle=`hsl(${bgHue},100%,50%)`;
+  ctx.shadowColor=`hsl(${bgHue},100%,50%)`;ctx.shadowBlur=40;
+  ctx.globalAlpha=0.3;
+  ctx.fillText(title,W/2+2,H/2-58+HUD_H/2);
+  ctx.globalAlpha=1;
+  // Main title
+  ctx.font='bold 42px Orbitron';
   for(let i=0;i<title.length;i++){
     const hue=(globalFrame*3+i*30)%360;
     ctx.fillStyle=`hsl(${hue},100%,60%)`;
@@ -849,6 +1026,15 @@ function drawTitleScreen(){
     const totalW=ctx.measureText(title).width;
     ctx.fillText(title[i],W/2-totalW/2+charW+12,H/2-60+HUD_H/2);
   }
+  
+  // JUICED EDITION subtitle
+  ctx.font='bold 18px Orbitron';
+  const juicedAlpha=0.7+Math.sin(globalFrame*0.08)*0.3;
+  ctx.globalAlpha=juicedAlpha;
+  ctx.fillStyle='#ff1493';
+  ctx.shadowColor='#ff1493';ctx.shadowBlur=25;
+  ctx.fillText('JUICED EDITION',W/2,H/2-25+HUD_H/2);
+  ctx.globalAlpha=1;
   
   // Pulsing start text
   const alpha=0.5+Math.sin(globalFrame*0.05)*0.5;
@@ -872,12 +1058,37 @@ function drawTitleScreen(){
     ctx.beginPath();ctx.arc(ddx,dpy,3,0,Math.PI*2);ctx.fill();
   }
   
+  // Floating ghost sprites
+  const ghostColors=['#ff0000','#ffb8ff','#00ffff','#ffb852'];
+  for(let gi=0;gi<4;gi++){
+    const gx=W*0.15+gi*(W*0.22);
+    const gy=H/2+140+HUD_H/2+Math.sin(globalFrame*0.04+gi*1.5)*15;
+    const gr=10;
+    ctx.fillStyle=ghostColors[gi];
+    ctx.shadowColor=ghostColors[gi];ctx.shadowBlur=12;
+    ctx.beginPath();ctx.arc(gx,gy-2,gr,Math.PI,0);
+    ctx.lineTo(gx+gr,gy+gr-2);
+    for(let s=0;s<3;s++){
+      const sx=gx+gr-s*(gr*2/3);
+      ctx.quadraticCurveTo(sx-gr/3,gy+gr+(s%2===0?-3:3),sx-gr*2/3,gy+gr-2);
+    }
+    ctx.closePath();ctx.fill();
+    // Eyes
+    ctx.fillStyle='#fff';
+    ctx.beginPath();ctx.arc(gx-3,gy-3,3,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(gx+3,gy-3,3,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#00f';
+    ctx.beginPath();ctx.arc(gx-3,gy-3,1.5,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(gx+3,gy-3,1.5,0,Math.PI*2);ctx.fill();
+  }
+  
   ctx.restore();
   drawCRT();
 }
 
 function drawGameOverScreen(){
   drawBackground();
+  drawStarField();
   drawMaze();drawDots();
   
   ctx.save();
@@ -906,6 +1117,8 @@ function drawGameOverScreen(){
 
 function drawReadyScreen(){
   drawBackground();
+  drawBassPulse();
+  drawStarField();
   drawMaze();drawDots();
   ghosts.forEach(drawGhost);
   drawPacman();
@@ -920,21 +1133,363 @@ function drawReadyScreen(){
   drawCRT();
 }
 
+// ======================== JUICE DRAWING ========================
+
+function drawBassPulse(){
+  // Effect #1: Background pulse
+  const isPower=frightenedTimer>0;
+  const pulseRate=isPower?0.15:0.05;
+  const pulseIntensity=Math.sin(globalFrame*pulseRate);
+  if(pulseIntensity>0.7){
+    const alpha=isPower?(pulseIntensity-0.7)*0.15:(pulseIntensity-0.7)*0.08;
+    ctx.save();
+    ctx.fillStyle=isPower?`rgba(100,0,80,${alpha})`:`rgba(30,30,80,${alpha})`;
+    ctx.fillRect(0,0,W,H+HUD_H);
+    ctx.restore();
+  }
+}
+
+function drawStarField(){
+  // Effect #13
+  const isPower=frightenedTimer>0;
+  ctx.save();
+  for(const s of juiceState.stars){
+    const alpha=Math.max(0,s.alpha);
+    ctx.globalAlpha=alpha*0.6;
+    if(isPower){
+      const hue=(globalFrame*5+s.x+s.y)%360;
+      ctx.fillStyle=`hsl(${hue},100%,70%)`;
+    }else{
+      ctx.fillStyle='#ffffff';
+    }
+    ctx.beginPath();ctx.arc(s.x,s.y,s.size,0,Math.PI*2);ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawPacTrail(){
+  // Effect #2: Neon trail ribbon
+  if(juiceState.pacTrail.length<2)return;
+  const isPower=frightenedTimer>0;
+  ctx.save();
+  for(let i=1;i<juiceState.pacTrail.length;i++){
+    const p0=juiceState.pacTrail[i-1],p1=juiceState.pacTrail[i];
+    const frac=1-i/juiceState.pacTrail.length;
+    const alpha=frac*0.7;
+    const width=(juiceState.pacTrail.length-i)*0.6;
+    ctx.globalAlpha=alpha;
+    if(isPower){
+      const hue=(globalFrame*8+i*40)%360;
+      ctx.strokeStyle=`hsl(${hue},100%,60%)`;
+      ctx.shadowColor=`hsl(${hue},100%,60%)`;
+    }else{
+      const r=255,g_=Math.max(0,255-i*20),b=Math.max(0,80-i*15);
+      ctx.strokeStyle=`rgb(${r},${g_},${b})`;
+      ctx.shadowColor='#ff8800';
+    }
+    ctx.shadowBlur=8*frac;
+    ctx.lineWidth=width;
+    ctx.beginPath();ctx.moveTo(p0.x+shakeX,p0.y+shakeY);ctx.lineTo(p1.x+shakeX,p1.y+shakeY);ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawGhostTrails(){
+  // Effect #3: Ghost afterimage trail
+  ctx.save();
+  for(const g of ghosts){
+    const trail=juiceState.ghostTrails[g.name];
+    if(!trail)continue;
+    for(let i=1;i<trail.length;i++){
+      const t=trail[i];
+      const alpha=(trail.length-i)/trail.length*0.3;
+      ctx.globalAlpha=alpha;
+      if(t.eaten){
+        // White eye afterimages
+        drawGhostEyes(t.x+shakeX,t.y+shakeY,g.dir,0.7);
+      }else{
+        const px=t.x+shakeX,py=t.y+shakeY;
+        const r=T*0.35;
+        ctx.fillStyle=t.frightened?'#2222cc':t.color;
+        ctx.beginPath();ctx.arc(px,py-2,r,Math.PI,0);ctx.lineTo(px+r,py+r-4);ctx.lineTo(px-r,py+r-4);ctx.closePath();ctx.fill();
+      }
+    }
+  }
+  ctx.restore();
+}
+
+function drawSpeedLines(){
+  // Effect #4
+  if(juiceState.speedLines.length===0)return;
+  ctx.save();
+  for(const sl of juiceState.speedLines){
+    const alpha=sl.life/sl.maxLife*0.3;
+    ctx.globalAlpha=alpha;
+    ctx.strokeStyle='#ffffff';
+    ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.moveTo(sl.x+shakeX,sl.y+shakeY);
+    ctx.lineTo(sl.x+sl.dx*sl.len+shakeX,sl.y+sl.dy*sl.len+shakeY);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawPulseWaves(){
+  // Effect #5: Wall pulse wave
+  for(const pw of juiceState.pulseWaves){
+    const alpha=pw.life/120*0.6;
+    ctx.save();
+    ctx.strokeStyle=`rgba(255,0,255,${alpha})`;
+    ctx.shadowColor='#f0f';ctx.shadowBlur=15;
+    ctx.lineWidth=3;
+    ctx.beginPath();ctx.arc(pw.x+shakeX,pw.y+shakeY,pw.radius,0,Math.PI*2);ctx.stroke();
+    ctx.restore();
+    // Flash walls within wave ring
+    const innerR=Math.max(0,pw.radius-T);
+    for(let y=0;y<ROWS;y++){
+      for(let x=0;x<COLS;x++){
+        if(maze[y][x]!==1)continue;
+        const wx=x*T+T/2,wy=y*T+T/2+HUD_H;
+        const d=eucDist(pw.x,pw.y,wx,wy);
+        if(d>innerR&&d<pw.radius){
+          ctx.save();
+          ctx.globalAlpha=alpha*0.4;
+          ctx.fillStyle='#f0f';
+          ctx.shadowColor='#f0f';ctx.shadowBlur=10;
+          ctx.fillRect(x*T+shakeX,y*T+HUD_H+shakeY,T,T);
+          ctx.restore();
+        }
+      }
+    }
+  }
+}
+
+function drawDotRipples(){
+  // Effect #12: Dot ripples
+  ctx.save();
+  for(const r of juiceState.dotRipples){
+    const alpha=r.life/r.maxLife*0.5;
+    ctx.globalAlpha=alpha;
+    ctx.strokeStyle='#ffdd44';
+    ctx.shadowColor='#ffdd44';ctx.shadowBlur=8;
+    ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(r.x+shakeX,r.y+shakeY,r.radius,0,Math.PI*2);ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawDotMagnetize(){
+  // Effect #12: Dots near Pacman visually shift toward Pacman (purely visual)
+  if(pacman.deathTimer>0)return;
+  const pg=pxToGrid(pacman.x,pacman.y);
+  for(let dy=-3;dy<=3;dy++){
+    for(let dx=-3;dx<=3;dx++){
+      const gx=pg.x+dx,gy=pg.y+dy;
+      if(gx<0||gx>=COLS||gy<0||gy>=ROWS)continue;
+      if(maze[gy][gx]!==2)continue;
+      const dotX=gx*T+T/2,dotY=gy*T+T/2+HUD_H;
+      const d=eucDist(pacman.x,pacman.y,dotX,dotY);
+      if(d<T*3&&d>T*0.5){
+        const pull=Math.max(0,(T*3-d)/(T*3))*3;
+        const ang=Math.atan2(pacman.y-dotY,pacman.x-dotX);
+        const vx=Math.cos(ang)*pull,vy=Math.sin(ang)*pull;
+        ctx.save();
+        ctx.fillStyle='#ffdd44';
+        ctx.shadowColor='#ffdd44';ctx.shadowBlur=6;
+        ctx.globalAlpha=0.6;
+        ctx.beginPath();ctx.arc(dotX+vx+shakeX,dotY+vy+shakeY,2.5,0,Math.PI*2);ctx.fill();
+        ctx.restore();
+      }
+    }
+  }
+}
+
+function drawComboTexts(){
+  // Effect #7
+  ctx.save();
+  for(const c of juiceState.comboTexts){
+    const frac=c.life/c.maxLife;
+    const alpha=Math.min(1,frac*2);
+    const scale=c.massive?2+Math.sin(c.life*0.2)*0.3:1.5;
+    const fontSize=c.massive?Math.floor(32*scale):Math.floor(24*scale);
+    ctx.globalAlpha=alpha;
+    const hue=(globalFrame*10+c.life*5)%360;
+    ctx.fillStyle=`hsl(${hue},100%,60%)`;
+    ctx.shadowColor=`hsl(${hue},100%,60%)`;ctx.shadowBlur=30;
+    ctx.font=`bold ${fontSize}px Orbitron`;
+    ctx.textAlign='center';
+    ctx.fillText(c.text,c.x+shakeX,c.y+shakeY);
+  }
+  ctx.restore();
+}
+
+function drawLightningBolts(){
+  // Effect #11
+  if(juiceState.lightningBolts.length===0)return;
+  ctx.save();
+  for(const l of juiceState.lightningBolts){
+    const alpha=l.life/l.maxLife;
+    ctx.globalAlpha=alpha;
+    ctx.strokeStyle='#ffffff';
+    ctx.shadowColor='#0ff';ctx.shadowBlur=15;
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    let cx=l.x+shakeX,cy=l.y+shakeY;
+    ctx.moveTo(cx,cy);
+    const len=Math.max(W,H);
+    const segments=8;
+    for(let s=0;s<segments;s++){
+      cx+=Math.cos(l.angle)*len/segments+(Math.random()-0.5)*20;
+      cy+=Math.sin(l.angle)*len/segments+(Math.random()-0.5)*20;
+      ctx.lineTo(cx,cy);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawDeathShockwave(){
+  // Effect #10
+  if(!juiceState.deathShockwave)return;
+  const sw=juiceState.deathShockwave;
+  const alpha=sw.life/sw.maxLife;
+  ctx.save();
+  ctx.strokeStyle=`rgba(255,255,0,${alpha})`;
+  ctx.shadowColor='#ff0';ctx.shadowBlur=20;
+  ctx.lineWidth=3;
+  ctx.beginPath();ctx.arc(sw.x+shakeX,sw.y+shakeY,sw.radius,0,Math.PI*2);ctx.stroke();
+  ctx.restore();
+}
+
+function drawDeathDesaturate(){
+  // Effect #10: desaturation overlay
+  if(juiceState.deathDesaturate>0.01){
+    ctx.save();
+    ctx.globalAlpha=juiceState.deathDesaturate*0.4;
+    ctx.fillStyle='#444';
+    ctx.globalCompositeOperation='saturation';
+    ctx.fillRect(0,0,W,H+HUD_H);
+    ctx.restore();
+  }
+}
+
+function drawGhostZoom(){
+  // Effect #11: zoom circle on ghost eat location
+  if(!juiceState.ghostZoom)return;
+  const gz=juiceState.ghostZoom;
+  const frac=gz.timer/20;
+  const radius=T*(2-frac);
+  ctx.save();
+  ctx.strokeStyle=`rgba(0,255,255,${frac})`;
+  ctx.shadowColor='#0ff';ctx.shadowBlur=20;
+  ctx.lineWidth=3;
+  ctx.beginPath();ctx.arc(gz.x+shakeX,gz.y+shakeY,radius,0,Math.PI*2);ctx.stroke();
+  ctx.restore();
+}
+
+function drawPowerAtmosphere(){
+  // Effect #6: Power mode atmosphere
+  const a=juiceState.powerAtmosphere;
+  if(a<0.01)return;
+  // Purple/red tint overlay
+  ctx.save();
+  ctx.globalAlpha=a*0.15;
+  ctx.fillStyle='#400030';
+  ctx.fillRect(0,0,W,H+HUD_H);
+  ctx.restore();
+}
+
+function drawPowerChromaticAberration(){
+  // Effect #6: chromatic aberration during power mode
+  const a=juiceState.powerAtmosphere;
+  if(a<0.3)return;
+  // We simulate by drawing colored overlays with slight offset
+  ctx.save();
+  ctx.globalAlpha=a*0.03;
+  ctx.globalCompositeOperation='screen';
+  ctx.drawImage(canvas,-2,0);
+  ctx.fillStyle='rgba(255,0,0,0.02)';
+  ctx.fillRect(0,0,W,H+HUD_H);
+  ctx.drawImage(canvas,2,0);
+  ctx.fillStyle='rgba(0,0,255,0.02)';
+  ctx.fillRect(0,0,W,H+HUD_H);
+  ctx.restore();
+}
+
+function drawLevelComplete(){
+  // Effect #9
+  if(juiceState.levelFlashTimer<=0)return;
+  const flash=juiceState.levelFlashTimer;
+  // Flash maze walls with neon colors
+  if(flash>30){
+    const colorIdx=Math.floor(globalFrame/3)%juiceState.levelFlashColors.length;
+    ctx.save();
+    ctx.globalAlpha=0.3;
+    ctx.fillStyle=juiceState.levelFlashColors[colorIdx];
+    ctx.fillRect(0,HUD_H,W,H);
+    ctx.restore();
+  }
+  // Big LEVEL COMPLETE text
+  const scale=juiceState.levelTextScale;
+  const hue=(globalFrame*8)%360;
+  ctx.save();
+  ctx.globalAlpha=Math.min(1,flash/30);
+  ctx.font=`bold ${Math.floor(36*scale)}px Orbitron`;
+  ctx.textAlign='center';
+  ctx.fillStyle=`hsl(${hue},100%,60%)`;
+  ctx.shadowColor=`hsl(${hue},100%,80%)`;ctx.shadowBlur=40;
+  ctx.fillText('LEVEL COMPLETE!',W/2,H/2+HUD_H/2);
+  ctx.restore();
+}
+
+function drawScorePop(){
+  // Effect #8
+  if(juiceState.scorePop<=0)return;
+  // Mini text flying up from score
+  const frac=juiceState.scorePop/30;
+  ctx.save();
+  ctx.globalAlpha=frac;
+  ctx.fillStyle='#0ff';
+  ctx.shadowColor='#0ff';ctx.shadowBlur=10;
+  ctx.font=`bold ${12+juiceState.scorePop*0.5}px Orbitron`;
+  ctx.textAlign='left';
+  ctx.fillText(juiceState.scorePopText,120,28-((30-juiceState.scorePop)*1.5));
+  ctx.restore();
+}
+
 function drawPlayingScreen(){
   drawBackground();
+  drawBassPulse();
+  drawStarField();
   
   ctx.save();
   ctx.translate(shakeX,shakeY);
   drawMaze();
+  drawPulseWaves();
   drawDots();
+  drawDotMagnetize();
+  drawDotRipples();
+  drawGhostTrails();
   ghosts.forEach(drawGhost);
+  drawPacTrail();
+  drawSpeedLines();
   drawPacman();
   drawParticles();
   drawFloatingTexts();
+  drawComboTexts();
+  drawLightningBolts();
+  drawDeathShockwave();
+  drawGhostZoom();
   ctx.restore();
   
+  drawPowerAtmosphere();
+  drawLevelComplete();
+  drawDeathDesaturate();
   drawFlash();
   drawHUD();
+  drawScorePop();
+  drawPowerChromaticAberration();
   drawCRT();
 }
 
