@@ -218,7 +218,7 @@ h1{
 
 <h1>🕹️ NEON PACMAN</h1>
 <div class="subtitle">⚡ HIGH ENERGY TRACK SAMPLER ⚡</div>
-<div class="instructions">Click play to preview • "Chasing The Light" is your current fave — find something with even MORE energy!</div>
+<div class="instructions">Traceur is your current fave — 10 fresh tracks to compare. Find THE ONE!</div>
 
 <div class="tracks" id="tracks"></div>
 
@@ -236,17 +236,18 @@ h1{
 
 <script>
 const trackData=[
-  {file:'chasing_the_light.mp3',name:'Chasing The Light',duration:'4:25',desc:'⭐ YOUR PICK — Energetic pursuit vibes'},
-  {file:'skybreak.mp3',name:'Skybreak',duration:'4:25',desc:'High-altitude energy burst'},
-  {file:'traceur.mp3',name:'Traceur',duration:'4:20',desc:'Parkour-paced electronic chase'},
-  {file:'race_against_yourself.mp3',name:'Race Against Yourself',duration:'5:09',desc:'Driving competitive energy'},
-  {file:'final_form.mp3',name:'Final Form',duration:'4:23',desc:'Peak intensity transformation'},
-  {file:'counterstrike.mp3',name:'Counterstrike',duration:'3:46',desc:'Sharp tactical electronic'},
-  {file:'capture_the_packet.mp3',name:'Capture The Packet',duration:'4:25',desc:'Digital pursuit thriller'},
-  {file:'gunship.mp3',name:'Gunship',duration:'3:32',desc:'High-speed aerial combat vibes'},
-  {file:'directional_flux.mp3',name:'Directional Flux',duration:'5:08',desc:'Flowing electronic momentum'},
-  {file:'catalyst.mp3',name:'Catalyst',duration:'10:49',desc:'Epic progressive builder'},
-  {file:'freefall.mp3',name:'Freefall',duration:'10:21',desc:'Adrenaline-fueled descent'},
+  {file:'traceur.mp3',name:'Traceur',duration:'4:20',desc:'⭐ YOUR PICK — Parkour-paced electronic chase'},
+  {file:'chasing_the_light.mp3',name:'Chasing The Light',duration:'4:25',desc:'⭐ Previous fave — Energetic pursuit vibes'},
+  {file:'breakdown.mp3',name:'Breakdown',duration:'5:45',desc:'Intense buildup-to-drop energy'},
+  {file:'disrupt.mp3',name:'Disrupt',duration:'4:03',desc:'Sharp aggressive electronic'},
+  {file:'tomorrowland.mp3',name:'Tomorrowland',duration:'4:29',desc:'Festival-energy forward drive'},
+  {file:'strike.mp3',name:'Strike',duration:'3:46',desc:'Punchy high-tempo assault'},
+  {file:'expropriation.mp3',name:'Expropriation',duration:'4:55',desc:'Relentless electronic momentum'},
+  {file:'praxis.mp3',name:'Praxis',duration:'4:55',desc:'Theory into action — driving beats'},
+  {file:'radical.mp3',name:'Radical',duration:'5:21',desc:'Unapologetic high-energy electronic'},
+  {file:'simple_complexity.mp3',name:'Simple Complexity',duration:'4:33',desc:'Layered but punchy'},
+  {file:'symphony_of_riot.mp3',name:'Symphony of Riot',duration:'4:37',desc:'Orchestral chaos meets electronic'},
+  {file:'verticalocation.mp3',name:'Verticalocation',duration:'4:06',desc:'Vertical climb energy'},
 ];
 
 let currentAudio=null;
