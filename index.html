@@ -139,7 +139,15 @@ let juiceState={
   // Level complete (#9)
   levelFlashTimer:0,levelFlashColors:['#0ff','#f0f','#ff0','#0f0','#f80','#08f'],levelTextScale:0,levelParticles:false,
   // Power mode
-  powerAtmosphere:0
+  powerAtmosphere:0,
+  // Screen zoom
+  screenZoom:1,
+  // Fruit
+  fruit:null,
+  // Kill streak
+  ghostsEatenThisPower:0,
+  // Near miss
+  nearMissTimer:0
 };
 
 // Directions
@@ -221,6 +229,10 @@ function resetLevel(){
   juiceState.levelFlashTimer=0;juiceState.levelTextScale=0;juiceState.levelParticles=false;
   juiceState.powerAtmosphere=0;
   juiceState.scorePop=0;
+  juiceState.screenZoom=1;
+  juiceState.fruit=null;
+  juiceState.ghostsEatenThisPower=0;
+  juiceState.nearMissTimer=0;
 }
 
 function resetPositions(){
@@ -435,7 +447,7 @@ function checkCollisions(){
   // Dot
   if(maze[pg.y][pg.x]===2){
     maze[pg.y][pg.x]=0;score+=10;dotsLeft--;
-    sfxDot();
+    sfxDot();triggerShake(3);
     spawnParticle(pacman.x,pacman.y,'#ff0',3,1,15);
     // Juice: combo system
     juiceState.dotStreak++;juiceState.comboTimer=60;
@@ -451,24 +463,48 @@ function checkCollisions(){
     if(juiceState.dotsEatenCount%5===0){
       juiceState.dotRipples.push({x:pacman.x,y:pacman.y,radius:0,maxRadius:40,life:30,maxLife:30});
     }
+    // Juice: fruit spawn every 70 dots
+    if(juiceState.dotsEatenCount%70===0&&!juiceState.fruit){
+      const fruitTypes=[{type:'C',color:'#ff2222',points:100},{type:'S',color:'#ff4488',points:300},{type:'O',color:'#ff8800',points:500},{type:'A',color:'#44ff44',points:700},{type:'M',color:'#44ff88',points:1000}];
+      const fi=Math.min(Math.floor(juiceState.dotsEatenCount/70)-1,fruitTypes.length-1);
+      const ft=fruitTypes[fi];
+      const fp=tileCenter(14,17);
+      juiceState.fruit={x:fp.x,y:fp.y,type:ft.type,color:ft.color,points:ft.points,timer:300};
+    }
   }
   // Power pellet
   if(maze[pg.y][pg.x]===3){
     maze[pg.y][pg.x]=0;score+=50;dotsLeft--;
     sfxPower();
     frightenedTimer=360;ghostEatCombo=0;
+    juiceState.ghostsEatenThisPower=0;
     ghosts.forEach(g=>{
       if(!g.inHouse&&!g.exiting&&!g.eaten){
         g.frightened=true;
         g.dir={x:-g.dir.x,y:-g.dir.y};
       }
     });
-    triggerFlash();
+    triggerFlash();triggerShake(8);
+    juiceState.screenZoom=1.05;
     spawnParticle(pacman.x,pacman.y,'#f0f',15,3,40);
     // Juice: wall pulse wave
-    juiceState.pulseWaves.push({x:pacman.x,y:pacman.y,radius:0,maxRadius:Math.max(W,H),life:120});
+    juiceState.pulseWaves.push({x:pacman.x,y:pacman.y,radius:0,maxRadius:300,life:60});
     // Juice: score pop
     juiceState.scorePop=25;juiceState.scorePopText='+50';
+  }
+  
+  // Fruit collision
+  if(juiceState.fruit){
+    const fd=eucDist(pacman.x,pacman.y,juiceState.fruit.x,juiceState.fruit.y);
+    if(fd<T*0.8){
+      const fr=juiceState.fruit;
+      score+=fr.points;
+      spawnParticle(fr.x,fr.y,fr.color,25,4,50);
+      spawnFloat(fr.x,fr.y,'+'+fr.points,fr.color);
+      triggerShake(8);
+      juiceState.scorePop=25;juiceState.scorePopText='+'+fr.points;
+      juiceState.fruit=null;
+    }
   }
   
   // Level complete
@@ -494,6 +530,7 @@ function checkCollisions(){
         // Eat ghost
         g.eaten=true;g.frightened=false;
         ghostEatCombo++;
+        juiceState.ghostsEatenThisPower++;
         const pts=[200,400,800,1600][Math.min(ghostEatCombo-1,3)];
         score+=pts;
         sfxGhostEat();
@@ -515,6 +552,10 @@ function checkCollisions(){
         // Pacman dies
         pacmanDie();
       }
+    }else if(d<T*2.5&&!g.frightened&&juiceState.nearMissTimer<=0){
+      // Near miss!
+      juiceState.nearMissTimer=60;
+      triggerShake(4);
     }
   }
 }
@@ -566,6 +607,8 @@ function update(){
   if(juiceState.scorePop>0)juiceState.scorePop--;
   // Dot ripples
   juiceState.dotRipples=juiceState.dotRipples.filter(r=>{r.radius+=2;r.life--;return r.life>0;});
+  // Fruit timer
+  if(juiceState.fruit){juiceState.fruit.timer--;if(juiceState.fruit.timer<=0)juiceState.fruit=null;}
   // Pulse waves
   juiceState.pulseWaves=juiceState.pulseWaves.filter(pw=>{pw.radius+=5;pw.life--;return pw.life>0;});
   // Death effects
@@ -584,6 +627,10 @@ function update(){
   if(juiceState.levelFlashTimer>0){juiceState.levelFlashTimer--;juiceState.levelTextScale=Math.min(juiceState.levelTextScale+0.05,1);}
   // Power atmosphere lerp
   juiceState.powerAtmosphere+=(frightenedTimer>0?1:0-juiceState.powerAtmosphere)*0.05;
+  // Screen zoom lerp
+  if(juiceState.screenZoom>1.001)juiceState.screenZoom+=(1-juiceState.screenZoom)*0.08;
+  // Near miss timer
+  if(juiceState.nearMissTimer>0)juiceState.nearMissTimer--;
   // Pacman trail
   if(pacman&&pacman.deathTimer<=0&&pacman.dir!==DIR.NONE){
     juiceState.pacTrail.unshift({x:pacman.x,y:pacman.y});
@@ -706,11 +753,20 @@ function drawMaze(){
       
       // Draw edges facing non-wall tiles
       const pa=juiceState.powerAtmosphere;
-      const wallHue=pa>0.1?280+Math.sin(globalFrame*0.02+x*0.1+y*0.1)*20:200+Math.sin(globalFrame*0.02+x*0.1+y*0.1)*20;
+      let baseHue;
+      if(pa>0.1){baseHue=280+Math.sin(globalFrame*0.02+x*0.1+y*0.1)*20;}
+      else if(level===1){baseHue=200+Math.sin(globalFrame*0.02+x*0.1+y*0.1)*20;}
+      else if(level===2){baseHue=120+Math.sin(globalFrame*0.02+x*0.1+y*0.1)*20;}
+      else if(level===3){baseHue=290+Math.sin(globalFrame*0.02+x*0.1+y*0.1)*20;}
+      else if(level===4){baseHue=15+Math.sin(globalFrame*0.02+x*0.1+y*0.1)*15;}
+      else if(level===5){baseHue=50+Math.sin(globalFrame*0.02+x*0.1+y*0.1)*10;}
+      else{baseHue=(globalFrame*0.5+x*2+y*2)%360;}
+      const wallHue=baseHue;
       const wallColor=`hsl(${wallHue},100%,${60+pa*10}%)`;
+      const glowHues={1:'#00aaff',2:'#00ff44',3:'#cc44ff',4:'#ff6600',5:'#ffcc00'};
+      const glowColor=pa>0.1?'#cc44ff':(glowHues[level]||`hsl(${wallHue},100%,60%)`);
       ctx.save();
       ctx.strokeStyle=wallColor;
-      const glowColor=pa>0.1?'#cc44ff':'#00aaff';
       ctx.shadowColor=glowColor;ctx.shadowBlur=10+pa*10;
       ctx.lineWidth=2;
       
@@ -824,6 +880,14 @@ function drawPacman(){
     ctx.closePath();ctx.fill();
   }
   ctx.restore();
+  // Eye
+  const eyeAngle=angle;
+  const eyeX=px+Math.cos(eyeAngle)*r*0.15+Math.cos(eyeAngle+Math.PI/2)*r*0.3;
+  const eyeY=py+Math.sin(eyeAngle)*r*0.15+Math.sin(eyeAngle+Math.PI/2)*r*0.3;
+  ctx.fillStyle='#fff';ctx.shadowBlur=0;
+  ctx.beginPath();ctx.arc(eyeX,eyeY,3,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#000';
+  ctx.beginPath();ctx.arc(eyeX+Math.cos(eyeAngle)*1.2,eyeY+Math.sin(eyeAngle)*1.2,1.5,0,Math.PI*2);ctx.fill();
 }
 
 function drawGhost(g){
@@ -833,9 +897,9 @@ function drawGhost(g){
     return;
   }
   
-  const px=g.x+shakeX,py=g.y+shakeY;
-  const r=T*0.45;
   const isFrightened=g.frightened;
+  const px=g.x+shakeX+(isFrightened?(Math.random()-0.5)*4:0),py=g.y+shakeY+(isFrightened?(Math.random()-0.5)*4:0);
+  const r=T*0.45;
   const flashWhite=isFrightened&&frightenedTimer<120&&Math.floor(globalFrame/8)%2===0;
   
   ctx.save();
@@ -1236,32 +1300,15 @@ function drawSpeedLines(){
 }
 
 function drawPulseWaves(){
-  // Effect #5: Wall pulse wave
+  // Effect #5: Expanding ring outline only (no per-tile wall loop)
   for(const pw of juiceState.pulseWaves){
-    const alpha=pw.life/120*0.6;
+    const alpha=pw.life/60*0.6;
     ctx.save();
     ctx.strokeStyle=`rgba(255,0,255,${alpha})`;
     ctx.shadowColor='#f0f';ctx.shadowBlur=15;
     ctx.lineWidth=3;
     ctx.beginPath();ctx.arc(pw.x+shakeX,pw.y+shakeY,pw.radius,0,Math.PI*2);ctx.stroke();
     ctx.restore();
-    // Flash walls within wave ring
-    const innerR=Math.max(0,pw.radius-T);
-    for(let y=0;y<ROWS;y++){
-      for(let x=0;x<COLS;x++){
-        if(maze[y][x]!==1)continue;
-        const wx=x*T+T/2,wy=y*T+T/2+HUD_H;
-        const d=eucDist(pw.x,pw.y,wx,wy);
-        if(d>innerR&&d<pw.radius){
-          ctx.save();
-          ctx.globalAlpha=alpha*0.4;
-          ctx.fillStyle='#f0f';
-          ctx.shadowColor='#f0f';ctx.shadowBlur=10;
-          ctx.fillRect(x*T+shakeX,y*T+HUD_H+shakeY,T,T);
-          ctx.restore();
-        }
-      }
-    }
   }
 }
 
@@ -1401,19 +1448,22 @@ function drawPowerAtmosphere(){
 }
 
 function drawPowerChromaticAberration(){
-  // Effect #6: chromatic aberration during power mode
   const a=juiceState.powerAtmosphere;
   if(a<0.3)return;
-  // We simulate by drawing colored overlays with slight offset
   ctx.save();
-  ctx.globalAlpha=a*0.03;
-  ctx.globalCompositeOperation='screen';
-  ctx.drawImage(canvas,-2,0);
-  ctx.fillStyle='rgba(255,0,0,0.02)';
-  ctx.fillRect(0,0,W,H+HUD_H);
-  ctx.drawImage(canvas,2,0);
-  ctx.fillStyle='rgba(0,0,255,0.02)';
-  ctx.fillRect(0,0,W,H+HUD_H);
+  ctx.globalAlpha=a*0.08;
+  // Red tint on left edge
+  const grad1=ctx.createLinearGradient(0,0,60,0);
+  grad1.addColorStop(0,'rgba(255,0,0,0.3)');
+  grad1.addColorStop(1,'transparent');
+  ctx.fillStyle=grad1;
+  ctx.fillRect(0,0,60,H+HUD_H);
+  // Blue tint on right edge
+  const grad2=ctx.createLinearGradient(W-60,0,W,0);
+  grad2.addColorStop(0,'transparent');
+  grad2.addColorStop(1,'rgba(0,80,255,0.3)');
+  ctx.fillStyle=grad2;
+  ctx.fillRect(W-60,0,60,H+HUD_H);
   ctx.restore();
 }
 
@@ -1458,6 +1508,85 @@ function drawScorePop(){
   ctx.restore();
 }
 
+function drawFruit(){
+  if(!juiceState.fruit)return;
+  const fr=juiceState.fruit;
+  const pulse=0.8+Math.sin(globalFrame*0.1)*0.2;
+  ctx.save();
+  ctx.fillStyle=fr.color;
+  ctx.shadowColor=fr.color;ctx.shadowBlur=20*pulse;
+  ctx.beginPath();ctx.arc(fr.x+shakeX,fr.y+shakeY,10*pulse,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#fff';ctx.shadowBlur=0;
+  ctx.font='bold 10px Orbitron';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(fr.type,fr.x+shakeX,fr.y+shakeY+1);
+  ctx.restore();
+}
+
+function drawBassVisualizerBars(){
+  const isPower=frightenedTimer>0;
+  const barCount=10;
+  const barW=W/barCount;
+  ctx.save();
+  for(let i=0;i<barCount;i++){
+    const freq=0.03+i*0.007;
+    const phase=i*0.8;
+    const h=(15+Math.sin(globalFrame*freq+phase)*12+Math.sin(globalFrame*0.05+i)*8)*(isPower?2.5:1);
+    const alpha=isPower?0.15:0.06;
+    ctx.globalAlpha=alpha;
+    ctx.fillStyle=isPower?`hsl(${280+i*8},80%,50%)`:`hsl(${200+i*10},60%,40%)`;
+    ctx.fillRect(i*barW,H+HUD_H-h,barW-2,h);
+  }
+  ctx.restore();
+}
+
+function drawDotChainGlow(){
+  if(juiceState.dotStreak<3||pacman.deathTimer>0)return;
+  const faceDir=pacman.lastDir||pacman.dir;
+  if(!faceDir||faceDir===DIR.NONE)return;
+  const pg=pxToGrid(pacman.x,pacman.y);
+  ctx.save();
+  for(let i=1;i<=5;i++){
+    const gx=pg.x+faceDir.x*i,gy=pg.y+faceDir.y*i;
+    if(gx<0||gx>=COLS||gy<0||gy>=ROWS)break;
+    if(maze[gy][gx]===1)break;
+    if(maze[gy][gx]!==2)continue;
+    const dx=gx*T+T/2,dy=gy*T+T/2+HUD_H;
+    const glow=Math.max(0.2,(6-i)/5);
+    ctx.globalAlpha=glow*0.6;
+    ctx.fillStyle='#fff';
+    ctx.shadowColor='#ffdd44';ctx.shadowBlur=15*glow;
+    ctx.beginPath();ctx.arc(dx+shakeX,dy+shakeY,3,0,Math.PI*2);ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawKillStreak(){
+  if(juiceState.ghostsEatenThisPower<2||frightenedTimer<=0)return;
+  const labels=['','','DOUBLE KILL!','TRIPLE KILL!','QUADRA KILL!!!'];
+  const text=labels[Math.min(juiceState.ghostsEatenThisPower,4)];
+  const pulse=0.8+Math.sin(globalFrame*0.15)*0.2;
+  ctx.save();
+  ctx.globalAlpha=Math.min(1,frightenedTimer/60);
+  const hue=(globalFrame*12)%360;
+  ctx.fillStyle=`hsl(${hue},100%,60%)`;
+  ctx.shadowColor=`hsl(${hue},100%,70%)`;ctx.shadowBlur=40;
+  ctx.font=`bold ${Math.floor(34*pulse)}px Orbitron`;
+  ctx.textAlign='center';
+  ctx.fillText(text,W/2,H/2-40+HUD_H/2);
+  ctx.restore();
+}
+
+function drawNearMiss(){
+  if(juiceState.nearMissTimer<=0)return;
+  const alpha=juiceState.nearMissTimer/60;
+  ctx.save();
+  ctx.globalAlpha=alpha;
+  ctx.fillStyle='#ff4444';ctx.shadowColor='#ff0000';ctx.shadowBlur=20;
+  ctx.font='bold 20px Orbitron';ctx.textAlign='center';
+  ctx.fillText('CLOSE CALL!',W/2,H/2+50+HUD_H/2);
+  ctx.restore();
+}
+
 function drawPlayingScreen(){
   drawBackground();
   drawBassPulse();
@@ -1465,11 +1594,15 @@ function drawPlayingScreen(){
   
   ctx.save();
   ctx.translate(shakeX,shakeY);
+  const zoom=juiceState.screenZoom||1;
+  if(zoom>1.001){ctx.translate(W/2,H/2+HUD_H/2);ctx.scale(zoom,zoom);ctx.translate(-W/2,-(H/2+HUD_H/2));}
   drawMaze();
   drawPulseWaves();
   drawDots();
+  drawDotChainGlow();
   drawDotMagnetize();
   drawDotRipples();
+  drawFruit();
   drawGhostTrails();
   ghosts.forEach(drawGhost);
   drawPacTrail();
@@ -1483,8 +1616,11 @@ function drawPlayingScreen(){
   drawGhostZoom();
   ctx.restore();
   
+  drawBassVisualizerBars();
   drawPowerAtmosphere();
   drawLevelComplete();
+  drawKillStreak();
+  drawNearMiss();
   drawDeathDesaturate();
   drawFlash();
   drawHUD();
